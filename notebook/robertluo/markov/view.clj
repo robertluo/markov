@@ -128,3 +128,47 @@
         (cond input  (me/humanize (m/explain input args))
               output (me/humanize (m/explain output value))
               :else  (throw e))))))
+
+(defn heatmaps
+  "Transition matrices side by side, one per labelled chain, on one colour scale and with
+   the states in the order of the first chain, so they compare at a glance."
+  {:malli/schema [:=> [:cat [:sequential {:min 1} [:tuple :string chain/Chain]]] :map]}
+  [chains]
+  (let [order (mapv name (keys (second (first chains))))]
+    (kind/vega-lite
+     {:hconcat
+      (for [[label chain] chains]
+        {:title label
+         :width 180 :height 180
+         :data {:values (for [from (keys chain)
+                              to (keys chain)]
+                          {:from (name from) :to (name to)
+                           :p (get-in chain [from to] 0.0)})}
+         :encoding {:x {:field :to :type :nominal :sort order :title "tomorrow"}
+                    :y {:field :from :type :nominal :sort order :title "today"}}
+         :layer [{:mark :rect
+                  :encoding {:color {:field :p :type :quantitative
+                                     :scale {:domain [0 1] :scheme "blues"}
+                                     :legend nil}}}
+                 {:mark {:type :text :format ".2f"}
+                  :encoding {:text {:field :p :type :quantitative :format ".2f"}
+                             :color {:condition {:test "datum.p > 0.5" :value "white"}
+                                     :value "black"}}}]})})))
+
+(defn error-curve
+  "Error against the number of observations, on a log scale, one line per labelled
+   series of [n error] points."
+  {:malli/schema [:=> [:cat [:sequential [:tuple :string
+                                          [:sequential [:tuple pos-int? number?]]]]]
+                  :map]}
+  [series]
+  (kind/vega-lite
+   {:width 500 :height 250
+    :data {:values (for [[label points] series
+                         [n error] points]
+                     {:series label :n n :error error})}
+    :mark {:type :line :point true}
+    :encoding {:x {:field :n :type :quantitative :scale {:type :log}
+                   :title "observed transitions"}
+               :y {:field :error :type :quantitative :title "error"}
+               :color {:field :series :type :nominal :title nil}}}))
