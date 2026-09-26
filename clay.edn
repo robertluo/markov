@@ -1,0 +1,5 @@
+;; Clay reads this from the project root, both from the REPL and from the CLI.
+;; Rendered pages are build output and land under target/, which git ignores.
+{:base-source-path "notebook"
+ :base-target-path "target/notebook"
+ :subdirs-to-sync ["notebook"]}

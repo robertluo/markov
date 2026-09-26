@@ -7,8 +7,10 @@ Implementations of Markov chains, starting from the simplest form. See README.md
 | | |
 |---|---|
 | test | `clojure -M:dev:test` (kaocha lives in `:dev`; `-M:test` alone has no runner) — also `devenv test` |
-| lint | `clojure -M:lint --lint src test dev` |
+| lint | `clojure -M:lint --lint src test dev notebook` |
 | REPL | `clojure -M:dev:nrepl`, then `(markov.instrument/instrument!)` after loading a namespace |
+| notebook REPL | `clojure -M:dev:notebook:nrepl`, then `(scicloj.clay.v2.api/make! {:source-path "notebook/markov/chain_notebook.clj"})` |
+| render notebooks | `clojure -M:dev:notebook -m scicloj.clay.v2.main -r notebook/markov/<ns>_notebook.clj` → `target/notebook/` (config in `clay.edn`) |
 
 ## Conventions
 
@@ -27,3 +29,24 @@ Implementations of Markov chains, starting from the simplest form. See README.md
 - `io.github.robertluo/state-graph` (git dep) is on the classpath; use it only when a problem
   needs a graph.
 - Tests: `test/markov/<ns>_test.clj`, one per source namespace.
+
+## Notebooks
+
+[Clay](https://scicloj.github.io/clay/) notebooks live in `notebook/markov/<feature>_notebook.clj`
+(ns `markov.<feature>-notebook`). A notebook is both:
+
+- **a show room** for a feature already in `src`: it demonstrates the feature on a concrete
+  example, with kindly visualisations (`scicloj.kindly.v4.kind`: vega-lite, mermaid, tables).
+- **a lab** for a new feature: trial it first in a new notebook. Once its shape is settled,
+  migrate the general part into `src/markov/<feature>.clj` with tests, and leave the notebook
+  requiring it, as the feature's example and application.
+
+In a notebook:
+
+- Call `(instrument/instrument!)` near the top, so the page runs against guarded functions.
+  The notebook's own ns is `markov.*`, so it is collected too: a candidate function for `src`
+  is a public `defn` with `:malli/schema` from its first trial (call `instrument!` again after
+  defining it); presentation helpers are `defn-`.
+- Draws come from a seeded `java.util.Random`, so a page renders the same every time.
+- Rendered pages are build output (`target/notebook/`); check a rendered page, not just that it
+  renders — Clay does not run the charts' JavaScript.
