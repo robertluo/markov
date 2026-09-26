@@ -16,15 +16,10 @@
   (:require [robertluo.markov.chain :as chain]
             [robertluo.markov.estimate :as estimate]
             [robertluo.markov.fade :as fade]
-            [robertluo.markov.instrument :as instrument]
             [robertluo.markov.learner :as learner]
             [robertluo.markov.timed :as timed]
             [robertluo.markov.view :as view]
             [scicloj.kindly.v4.kind :as kind]))
-
-;; Everything below runs against guarded functions, as the tests do.
-
-(instrument/instrument!)
 
 (defn- approx=
   "Whether two nested maps of numbers agree to within rounding."

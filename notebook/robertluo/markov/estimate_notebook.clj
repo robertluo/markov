@@ -7,14 +7,9 @@
 (ns robertluo.markov.estimate-notebook
   (:require [robertluo.markov.chain :as chain]
             [robertluo.markov.estimate :as estimate]
-            [robertluo.markov.instrument :as instrument]
             [robertluo.markov.learner :as learner]
             [robertluo.markov.view :as view]
             [scicloj.kindly.v4.kind :as kind]))
-
-;; Everything below runs against guarded functions, as the tests do.
-
-(instrument/instrument!)
 
 ;; ## A hidden chain
 ;;

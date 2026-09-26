@@ -67,10 +67,15 @@ A notebook is both:
 
 In a notebook:
 
-- Call `(instrument/instrument!)` near the top, so the page runs against guarded functions.
-  The notebook's own ns is `robertluo.markov.*`, so it is collected too: a candidate function
-  for `src` is a public `defn` with `:malli/schema` from its first trial (call `instrument!`
-  again after defining it); presentation helpers are `defn-`.
+- Don't call `instrument!` in a notebook: the renderer (`robertluo.markov.notebooks`)
+  instruments every loaded `robertluo.markov.*` namespace after reloading and before
+  rendering, so pages always run against guarded functions. In a notebook REPL, call it
+  yourself after loading.
+- A candidate function for `src` is a public `defn` with `:malli/schema` from its first trial;
+  presentation helpers are `defn-`. The renderer instruments before a page runs, so a
+  function the page itself defines is not guarded while the page renders. Until it moves to
+  `src`, that is the one place a lab notebook calls `(instrument/instrument!)`, right after
+  the definition.
 - Show things through `robertluo.markov.view` (`notebook/robertluo/markov/view.clj`): state
   diagram, transition matrix, side-by-side heatmaps, row intervals, walk timeline, share bars,
   error curve, a humanized schema refusal, and seeded `draws`. Charts take a palette (`[[state colour] ...]`) so a state keeps

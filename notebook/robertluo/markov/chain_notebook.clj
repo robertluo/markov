@@ -6,12 +6,7 @@
 (ns robertluo.markov.chain-notebook
   (:require [malli.core :as m]
             [robertluo.markov.chain :as chain]
-            [robertluo.markov.instrument :as instrument]
             [robertluo.markov.view :as view]))
-
-;; Everything below runs against guarded functions, as the tests do.
-
-(instrument/instrument!)
 
 ;; ## A chain
 ;;

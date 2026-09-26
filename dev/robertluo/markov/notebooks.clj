@@ -3,6 +3,8 @@
    renders them all again whenever a .clj file under src/ or notebook/ changes: a changed
    namespace (and whatever depends on it) is reloaded first, so a page always shows the
    current code, including helpers the notebooks share, such as robertluo.markov.view.
+   Every robertluo.markov.* function with a schema is then instrumented, as kaocha does
+   for the tests, so every page runs against guarded functions without asking.
    Needs the :notebook alias; `devenv up` runs `-main` as a process.
 
    Clay's own live reload is not enough: it watches the notebook files only, and renders
@@ -13,6 +15,7 @@
             [clojure.tools.namespace.reload :as reload]
             [clojure.tools.namespace.track :as track]
             [nextjournal.beholder :as beholder]
+            [robertluo.markov.instrument :as instrument]
             [scicloj.clay.v2.api :as clay]))
 
 (defn- notebook? [path]
@@ -52,9 +55,9 @@
     (remove-ns (ns-name n))))
 
 (defn render-all!
-  "Reloads changed namespaces, then renders every notebook to target/notebook/.
-   A failure is printed, not thrown, so a watcher survives a broken edit. Answers
-   whether the render went through."
+  "Reloads changed namespaces, instruments them, then renders every notebook to
+   target/notebook/. A failure is printed, not thrown, so a watcher survives a broken
+   edit. Answers whether the render went through."
   []
   (let [paths (notebook-paths)
         start (System/nanoTime)]
@@ -62,7 +65,8 @@
     (try
       (if (reload!)
         (do (println "Reload failed, notebooks not rendered.") false)
-        (do (forget-notebooks!)
+        (do (instrument/instrument!)
+            (forget-notebooks!)
             (clay/make! {:source-path paths :render true})
             (printf "Rendered in %.1fs%n" (/ (- (System/nanoTime) start) 1e9))
             true))
