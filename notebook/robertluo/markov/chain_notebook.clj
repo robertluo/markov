@@ -1,13 +1,13 @@
 ;; # The simplest Markov chain
 ;;
-;; A show room for `markov.chain`: finitely many states, discrete time, and transition
-;; probabilities that do not change over time.
+;; A show room for `robertluo.markov.chain`: finitely many states, discrete time, and
+;; transition probabilities that do not change over time.
 
-(ns markov.chain-notebook
+(ns robertluo.markov.chain-notebook
   (:require [malli.core :as m]
             [malli.error :as me]
-            [markov.chain :as chain]
-            [markov.instrument :as instrument]
+            [robertluo.markov.chain :as chain]
+            [robertluo.markov.instrument :as instrument]
             [scicloj.kindly.v4.kind :as kind]))
 
 ;; Everything below runs against guarded functions, as the tests do.
@@ -126,8 +126,8 @@
   :transform [{:calculate "indexof(['sunny', 'cloudy', 'rainy'], datum.state)"
                :as :order}]})
 
-;; Those shares are the chain's stationary distribution. `markov.chain` does not compute
-;; it yet; it is a candidate for the next lab notebook.
+;; Those shares are the chain's stationary distribution. `robertluo.markov.chain` does not
+;; compute it yet; it is a candidate for the next lab notebook.
 
 ;; ## Guarded
 ;;

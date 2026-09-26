@@ -9,5 +9,5 @@ We use the following libraries:
  - github:robertluo/state-graph. If we find a graph is needed for the problem domain.
  - Clay. Notebooks under `notebook/` are a show room for each feature, and a lab where a new
    feature is trialled before its settled shape moves into `src`. Render one with
-   `clojure -M:dev:notebook -m scicloj.clay.v2.main -r notebook/markov/chain_notebook.clj`
-   and open `target/notebook/markov.chain_notebook.html`.
+   `clojure -M:dev:notebook -m scicloj.clay.v2.main -r notebook/robertluo/markov/chain_notebook.clj`
+   and open `target/notebook/robertluo.markov.chain_notebook.html`.

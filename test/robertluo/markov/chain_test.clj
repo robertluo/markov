@@ -1,9 +1,9 @@
-(ns markov.chain-test
+(ns robertluo.markov.chain-test
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [markov.chain :as chain]))
+            [robertluo.markov.chain :as chain]))
 
 (def gen-chain
   "A chain of one to six states, each row normalised from non-negative integer weights

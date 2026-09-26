@@ -1,4 +1,4 @@
-(ns markov.chain
+(ns robertluo.markov.chain
   "The simplest Markov chain: finitely many states, discrete time, and transition
    probabilities that do not change over time.
 
