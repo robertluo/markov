@@ -166,12 +166,14 @@
                                      :value "black"}}}]})})))
 
 (defn error-curve
-  "Error against the number of observations, on a log scale, one line per labelled
-   series of [n error] points."
+  "Error against the amount observed, on a log scale, one line per labelled series of
+   [amount error] points. The amount is observed transitions unless `:x-title` names
+   another."
   {:malli/schema [:=> [:cat [:sequential [:tuple :string
-                                          [:sequential [:tuple pos-int? number?]]]]]
+                                          [:sequential [:tuple [:and number? pos?] number?]]]]
+                   [:? [:map [:x-title {:optional true} :string]]]]
                   :map]}
-  [series]
+  [series & [{:keys [x-title] :or {x-title "observed transitions"}}]]
   (kind/vega-lite
    {:width 500 :height 250
     :data {:values (for [[label points] series
@@ -179,6 +181,6 @@
                      {:series label :n n :error error})}
     :mark {:type :line :point true}
     :encoding {:x {:field :n :type :quantitative :scale {:type :log}
-                   :title "observed transitions"}
+                   :title x-title}
                :y {:field :error :type :quantitative :title "error"}
                :color {:field :series :type :nominal :title nil}}}))

@@ -37,6 +37,16 @@ Implementations of Markov chains, starting from the simplest form. See README.md
   - The instrumentation wrapper keeps its arguments until the return is checked, so a guarded
     call keeps a lazy seq's head alive. Pass unbounded data as an eduction over a source that
     caches nothing (`(range)`, `view/draw-stream`); holding one keeps no elements alive.
+- **Learning goes through `robertluo.markov.learner`.** A learner is a map (schema `Learner`):
+  `:events` (a transducer), `:statistic` (its schema), `:empty`, `:step`, `:combine`,
+  `:readout`. What is known is plain data, kept apart from the learner. There is one way to
+  learn (`learner/learn`), with no convenience wrappers for now. A new learner:
+  - puts its step, combine and readout in public `defn`s with `:malli/schema`, and refers to
+    them from the map as vars (`#'step`) or calls to them (`(fn [k e] (step lambda k e))`),
+    never as function values: a function captured before `instrument!` is never guarded.
+  - states the three laws in its test through `test/robertluo/markov/laws.clj`
+    (`identity-law`, `associativity-law`, `parts-law` with its own way to split
+    observations); generators for walks are in `test/robertluo/markov/gen.clj`.
 - Randomness is an argument (a uniform draw in [0, 1)), never called inside a function, so
   everything stays pure and testable.
 - `io.github.robertluo/state-graph` (git dep) is on the classpath; use it only when a problem

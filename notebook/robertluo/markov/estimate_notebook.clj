@@ -8,6 +8,7 @@
   (:require [robertluo.markov.chain :as chain]
             [robertluo.markov.estimate :as estimate]
             [robertluo.markov.instrument :as instrument]
+            [robertluo.markov.learner :as learner]
             [robertluo.markov.view :as view]
             [scicloj.kindly.v4.kind :as kind]))
 
@@ -45,7 +46,7 @@
 ;; state. That is everything a Markov chain can learn from a walk, since the next state
 ;; depends on today only. Knowing nothing is no counts; learning a walk adds its counts.
 
-(def observed (reduce estimate/learn {} months))
+(def observed (reduce #(learner/learn estimate/counting %1 %2) {} months))
 
 (defn- count-table [counts order]
   (kind/table
@@ -101,14 +102,14 @@
   (for [[label knowledge] [["no prior" {}] ["α = 1" smoothed]]]
     [label (map-indexed (fn [i known] [(* 30 (inc i))
                                        (estimate/distance weather (estimate/estimate known))])
-                        (rest (reductions estimate/learn knowledge by-month)))]))
+                        (rest (reductions #(learner/learn estimate/counting %1 %2) knowledge by-month)))]))
 
 (view/error-curve progress)
 
 ;; A month at a time or all at once, the model ends knowing the same:
 
-(= (reduce estimate/learn smoothed by-month)
-   (estimate/learn smoothed year))
+(= (reduce #(learner/learn estimate/counting %1 %2) smoothed by-month)
+   (learner/learn estimate/counting smoothed year))
 
 ;; Observations need not fit in memory either. `learn` reads a walk as it goes, so an
 ;; unbounded stream of draws, walked lazily by `chain/steps` and bounded only where it
@@ -117,7 +118,7 @@
 (def ^:private long-run
   (eduction (chain/steps weather :sunny) (take 100000) (view/draw-stream 9)))
 
-(estimate/distance weather (estimate/estimate (estimate/learn smoothed long-run)))
+(estimate/distance weather (estimate/estimate (learner/learn estimate/counting smoothed long-run)))
 
 ;; ## More observations, better model
 ;;
@@ -129,7 +130,7 @@
 (defn- mean-error [knowledge n]
   (let [errors (for [seed (range 20)
                      :let [walk (chain/walk weather :sunny (view/draws (+ (* 1000 n) seed) n))]]
-                 (estimate/distance weather (estimate/estimate (estimate/learn knowledge walk))))]
+                 (estimate/distance weather (estimate/estimate (learner/learn estimate/counting knowledge walk))))]
     (/ (reduce + errors) (count errors))))
 
 (view/error-curve
@@ -151,15 +152,15 @@
 (def ten-days (chain/walk weather :sunny (view/draws 5 10)))
 
 (view/heatmaps [["hidden" weather]
-                ["no prior" (estimate/estimate (estimate/learn {} ten-days))]
-                ["α = 1" (estimate/estimate (estimate/learn smoothed ten-days))]])
+                ["no prior" (estimate/estimate (learner/learn estimate/counting {} ten-days))]
+                ["α = 1" (estimate/estimate (learner/learn estimate/counting smoothed ten-days))]])
 
-(view/diagram (estimate/estimate (estimate/learn {} ten-days)))
+(view/diagram (estimate/estimate (learner/learn estimate/counting {} ten-days)))
 
 ;; A prior can also name a state never observed. Its row is the prior alone, uniform:
 
 (estimate/estimate
- (estimate/learn (estimate/prior {:states (conj states :snowy) :alpha 1}) ten-days))
+ (learner/learn estimate/counting (estimate/prior {:states (conj states :snowy) :alpha 1}) ten-days))
 
 ;; ## Guarded
 ;;

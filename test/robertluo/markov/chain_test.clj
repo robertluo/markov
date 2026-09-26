@@ -52,6 +52,11 @@
                        (every? (fn [[a b]] (pos? (get-in chain [a b])))
                                (partition 2 1 path))))))
 
+(defspec transitions-pair-every-state-with-the-one-before 200
+  (prop/for-all [walk (gen/vector (gen/elements [:a :b :c]))]
+                (= (map vector (cons nil walk) walk)
+                   (sequence chain/transitions walk))))
+
 (defspec steps-walk-the-same-as-walk 200
   (prop/for-all [[chain start us] (gen/bind gen-chain
                                             #(gen/tuple (gen/return %)

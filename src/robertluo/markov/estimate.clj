@@ -1,16 +1,16 @@
 (ns robertluo.markov.estimate
-  "Learning a chain from observations, progressively. What is known is kept as counts:
-   how many times each state was seen followed by each next state. A prior is counts
-   imagined before any observation (pseudo-counts); learning a walk adds its counts; and
-   what has been learned is the prior for whatever comes next, so
+  "Learning a chain by counting: `counting` is a robertluo.markov.learner whose knowledge
+   is counts, how many times each state was seen followed by each next state. A prior is
+   counts imagined before any observation (pseudo-counts); learning a walk adds its
+   counts; and what has been learned is the prior for whatever comes next:
 
-     (-> (prior {:states #{:a :b} :alpha 1}) (learn walk-1) (learn walk-2))
-
-   knows the same as learning both walks at once, in either order. estimate turns what is
-   known, at any point, into the chain most likely to have made it.
+     (->> walks
+          (reduce #(learner/learn counting %1 %2) (prior {:states #{:a :b} :alpha 1}))
+          (learner/readout counting))
 
    Counts are all a Markov chain can learn from a walk: the next state depends on today
-   only, so the order of the steps adds nothing once they are counted."
+   only, so the order of the steps adds nothing once they are counted. So counts combine
+   by adding, in either order."
   (:require [robertluo.markov.chain :as chain]))
 
 (defn- closed? [counts]
@@ -38,34 +38,19 @@
   (let [row (if (pos? alpha) (zipmap states (repeat alpha)) {})]
     (zipmap states (repeat row))))
 
-(defn- transitions
-  "A transducer from states to [previous state] pairs, previous nil for the first."
-  [rf]
-  (let [prev (volatile! nil)]
-    (fn
-      ([] (rf))
-      ([acc] (rf acc))
-      ([acc s] (let [p @prev]
-                 (vreset! prev s)
-                 (rf acc [p s]))))))
-
-(defn- tally [counts [from to]]
+(defn step
+  "What `counts` becomes on one more transition: its states known, and the transition
+   counted once more."
+  {:malli/schema [:=> [:cat Counts chain/Transition] Counts]}
+  [counts [from to]]
   (cond-> (update counts to #(or % {}))
     from (update-in [from to] (fnil inc 0))))
 
-(def ^:private Walk
-  "A walk of any length, unbounded included: checked only for being seqable, since
-   checking its states would realise it. The guard on what learn answers checks them."
-  [:fn {:error/message "should be a seqable collection of states"} seqable?])
-
-(defn learn
-  "What `knowledge` becomes on observing `walk`: each of its states known, each of its
-   transitions counted once more. The walk is consumed as it is read, so a lazy one of any
-   length is never held whole. A walk continuing an earlier one should start with that
-   one's last state, or the transition between them is lost."
-  {:malli/schema [:=> [:cat Counts Walk] Counts]}
-  [knowledge walk]
-  (transduce transitions (completing tally) knowledge walk))
+(defn combine
+  "What was counted apart, as one: the counts added."
+  {:malli/schema [:=> [:cat Counts Counts] Counts]}
+  [earlier later]
+  (merge-with #(merge-with + %1 %2) earlier later))
 
 (defn- normalise [from row]
   (let [total (reduce + 0 (vals row))]
@@ -98,3 +83,12 @@
   (transduce (map #(row-distance (get a %) (get b %)))
              max 0.0
              (into (set (keys a)) (keys b))))
+
+(def counting
+  "The learner that counts: walks in, a chain out."
+  {:events    #'chain/transitions
+   :statistic Counts
+   :empty     {}
+   :step      #'step
+   :combine   #'combine
+   :readout   #'estimate})

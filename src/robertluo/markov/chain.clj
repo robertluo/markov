@@ -74,6 +74,24 @@
         ([acc] (rf acc))
         ([acc u] (rf acc (vswap! state #(next-state (get chain %) u))))))))
 
+(def Transition
+  "One step of a walk as an event: the state before and the state after. The first state
+   of a walk has no state before it, nil."
+  [:tuple [:maybe State] State])
+
+(defn transitions
+  "A transducer from the states of a walk to its transitions, one per state: the first
+   with nil before it, so that a walk's every state is seen, even a walk of one."
+  {:malli/schema [:=> [:cat ifn?] ifn?]}
+  [rf]
+  (let [prev (volatile! nil)]
+    (fn
+      ([] (rf))
+      ([acc] (rf acc))
+      ([acc s] (let [p @prev]
+                 (vreset! prev s)
+                 (rf acc [p s]))))))
+
 (defn walk
   "Every state visited from `start`, one step per draw: `start` first, then one state per
    element of `us`, a finite collection. For an unbounded stream of draws, use steps."
