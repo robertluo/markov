@@ -49,6 +49,11 @@ In a notebook:
   The notebook's own ns is `robertluo.markov.*`, so it is collected too: a candidate function
   for `src` is a public `defn` with `:malli/schema` from its first trial (call `instrument!`
   again after defining it); presentation helpers are `defn-`.
-- Draws come from a seeded `java.util.Random`, so a page renders the same every time.
+- Show things through `robertluo.markov.view` (`notebook/robertluo/markov/view.clj`): state
+  diagram, transition matrix, row intervals, walk timeline, share bars, a humanized schema
+  refusal, and seeded `draws`. Charts take a palette (`[[state colour] ...]`) so a state keeps
+  its colour across a page. A way of showing that a second notebook would want goes there, with
+  `:malli/schema` like any public fn; one-off presentation stays a `defn-` in the notebook.
+- Draws come from a seeded `java.util.Random` (`view/draws`), so a page renders the same every time.
 - Rendered pages are build output (`target/notebook/`); check a rendered page, not just that it
   renders — Clay does not run the charts' JavaScript.
