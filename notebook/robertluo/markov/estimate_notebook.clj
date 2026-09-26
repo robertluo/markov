@@ -2,7 +2,7 @@
 ;;
 ;; A show room for `robertluo.markov.estimate`. The chain notebook went from a chain to
 ;; its walks; this goes back, from walks alone to a chain that explains them: a model of
-;; the process that made them.
+;; the process that made them, which grows better as observations keep coming.
 
 (ns robertluo.markov.estimate-notebook
   (:require [robertluo.markov.chain :as chain]
@@ -41,11 +41,11 @@
 
 ;; ## Counting
 ;;
-;; Everything a Markov chain can learn from a walk is in its steps: how often each state
-;; was followed by each other state. The order of the steps, once counted, adds nothing,
-;; since the next state depends on today only.
+;; What the model knows is counts: how often each state was followed by each other
+;; state. That is everything a Markov chain can learn from a walk, since the next state
+;; depends on today only. Knowing nothing is no counts; learning a walk adds its counts.
 
-(def observed (estimate/counts months))
+(def observed (reduce estimate/learn {} months))
 
 (defn- count-table [counts order]
   (kind/table
@@ -58,10 +58,9 @@
 ;; ## Estimating
 ;;
 ;; The chain most likely to have made these counts divides each row by its total: the
-;; maximum-likelihood estimate. A prior may add a pseudo-count α to every transition,
-;; and may name states known to exist but not observed; the empty prior adds nothing.
+;; maximum-likelihood estimate.
 
-(def learned (estimate/estimate {} observed))
+(def learned (estimate/estimate observed))
 
 (view/heatmaps [["hidden" weather] ["learned from 3 months" learned]])
 
@@ -75,51 +74,96 @@
 
 (estimate/distance weather learned)
 
-;; More observations make a better model. The error of an estimate from one walk of n
-;; steps, averaged over 20 walks for each n, shrinks roughly like 1/√n: a hundred times
-;; the data for a tenth of the error.
+;; ## Prior knowledge
+;;
+;; Before any observation, the model may already know something: which states exist,
+;; and a pseudo-count α for each transition between them, as if each had been seen α
+;; times. A prior is counts too, so learning starts from it in the same way.
+
+(def ^:private states (set (keys weather)))
+
+(def smoothed (estimate/prior {:states states :alpha 1}))
+
+(count-table smoothed (map first palette))
+
+;; ## Learning as it goes
+;;
+;; What has been learned is the prior for whatever comes next, so the model can take a
+;; year of weather a month at a time, and be as good at each month's end as it can be on
+;; what it has seen. Each month starts on the last day of the one before, so that the
+;; transition between them is counted.
+
+(def year (chain/walk weather :sunny (view/draws 11 360)))
+
+(def by-month (partition 31 30 year))
+
+(def ^:private progress
+  (for [[label knowledge] [["no prior" {}] ["α = 1" smoothed]]]
+    [label (map-indexed (fn [i known] [(* 30 (inc i))
+                                       (estimate/distance weather (estimate/estimate known))])
+                        (rest (reductions estimate/learn knowledge by-month)))]))
+
+(view/error-curve progress)
+
+;; A month at a time or all at once, the model ends knowing the same:
+
+(= (reduce estimate/learn smoothed by-month)
+   (estimate/learn smoothed year))
+
+;; Observations need not fit in memory either. `learn` reads a walk as it goes, so an
+;; unbounded stream of draws, walked lazily by `chain/steps` and bounded only where it
+;; is consumed, is never held whole:
+
+(def ^:private long-run
+  (eduction (chain/steps weather :sunny) (take 100000) (view/draw-stream 9)))
+
+(estimate/distance weather (estimate/estimate (estimate/learn smoothed long-run)))
+
+;; ## More observations, better model
+;;
+;; The error of an estimate from one walk of n steps, averaged over 20 walks for each n,
+;; shrinks roughly like 1/√n: a hundred times the data for a tenth of the error.
 
 (def ^:private sizes [10 30 100 300 1000 3000 10000])
 
-(defn- mean-error [prior n]
+(defn- mean-error [knowledge n]
   (let [errors (for [seed (range 20)
                      :let [walk (chain/walk weather :sunny (view/draws (+ (* 1000 n) seed) n))]]
-                 (estimate/distance weather
-                                    (estimate/estimate prior (estimate/counts [walk]))))]
+                 (estimate/distance weather (estimate/estimate (estimate/learn knowledge walk))))]
     (/ (reduce + errors) (count errors))))
 
 (view/error-curve
- (for [[label prior] [["α = 0" {}] ["α = 1" {:alpha 1}]]]
-   [label (for [n sizes] [n (mean-error prior n)])]))
+ (for [[label knowledge] [["no prior" {}] ["α = 1" smoothed]]]
+   [label (for [n sizes] [n (mean-error knowledge n)])]))
 
 ;; ## Too few observations
 ;;
 ;; Ten days are not enough to see every transition, and plain counting calls what it
-;; has not seen impossible: a zero in the matrix, a missing arrow in the diagram. A
-;; pseudo-count keeps every transition possible, at the price of pulling each row
-;; towards uniform. In the chart above, smoothing helps while data is scarce, and its
-;; pull fades as the counts outgrow α.
+;; has not seen impossible: a zero in the matrix, a missing arrow in the diagram. The
+;; prior keeps every transition possible, at the price of pulling each row towards
+;; uniform. In the charts above, it helps while data is scarce, and its pull fades as the
+;; counts outgrow α.
 ;;
-;; These ten days end on the only rainy day, so nothing was seen to follow rain: with
-;; α = 0 the model has nothing to go on and rain stays put; with α = 1 its row is
+;; These ten days end on the only rainy day, so nothing was seen to follow rain: with no
+;; prior the model has nothing to go on and rain stays put; with α = 1 its row is
 ;; uniform.
 
-(def ten-days (estimate/counts [(chain/walk weather :sunny (view/draws 5 10))]))
+(def ten-days (chain/walk weather :sunny (view/draws 5 10)))
 
 (view/heatmaps [["hidden" weather]
-                ["α = 0" (estimate/estimate {} ten-days)]
-                ["α = 1" (estimate/estimate {:alpha 1} ten-days)]])
+                ["no prior" (estimate/estimate (estimate/learn {} ten-days))]
+                ["α = 1" (estimate/estimate (estimate/learn smoothed ten-days))]])
 
-(view/diagram (estimate/estimate {} ten-days))
+(view/diagram (estimate/estimate (estimate/learn {} ten-days)))
 
-;; A prior can also name a state never observed. With α it gets a uniform row, since
-;; there is nothing else to go on; without it, it stays put:
+;; A prior can also name a state never observed. Its row is the prior alone, uniform:
 
-(estimate/estimate {:states #{:snowy} :alpha 1} ten-days)
+(estimate/estimate
+ (estimate/learn (estimate/prior {:states (conj states :snowy) :alpha 1}) ten-days))
 
 ;; ## Guarded
 ;;
-;; No observations make no chain: the estimate has no state, and the guard on its return
-;; refuses it:
+;; Knowing nothing makes no chain: the estimate has no state, and the guard on its
+;; return refuses it:
 
-(view/refusal #(estimate/estimate {} (estimate/counts [])))
+(view/refusal #(estimate/estimate {}))

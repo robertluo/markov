@@ -25,6 +25,18 @@ Implementations of Markov chains, starting from the simplest form. See README.md
 - **Pure, non-trivial functions get property-based tests** with test.check (`defspec`). Prefer an
   invariant independent of the implementation over restating it. Example-based `deftest` is for
   the schema refusals and for concrete scenarios.
+- **Data of any size goes through transducers.** Where data may be large or unbounded (walks,
+  draws, observations), process it with `transduce`/`into`/`sequence`/`eduction` over a
+  transducer, and build it from its source lazily (e.g. `chain/steps`). A caller bounds it
+  where it is consumed (`(take n)`). Keep `loop`/`recur` and plain lazy-seq chains (`for`,
+  `partition`, `reductions`) to data that is small by definition, such as a row or a chain's
+  states, and say so in a comment where it is not obvious.
+  - Don't give such data a `[:sequential ...]` schema: checking it realises it, and never
+    returns on an unbounded one. Check that it is `seqable?` and let the return schema catch
+    bad elements.
+  - The instrumentation wrapper keeps its arguments until the return is checked, so a guarded
+    call keeps a lazy seq's head alive. Pass unbounded data as an eduction over a source that
+    caches nothing (`(range)`, `view/draw-stream`); holding one keeps no elements alive.
 - Randomness is an argument (a uniform draw in [0, 1)), never called inside a function, so
   everything stays pure and testable.
 - `io.github.robertluo/state-graph` (git dep) is on the classpath; use it only when a problem

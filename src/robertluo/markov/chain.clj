@@ -48,6 +48,7 @@
    body has run."
   {:malli/schema [:=> [:cat Row Draw] State]}
   [row u]
+  ;; A row has one entry per state, small by definition, so a loop over it is fine.
   (loop [[[s p] & more] (filter (comp pos? val) row)
          upper 0.0]
     (let [upper (+ upper p)]
@@ -55,9 +56,27 @@
         s
         (recur more upper)))))
 
+(defn steps
+  "A transducer from draws to the states they lead to, one per draw, walking from `start`
+   (which it does not emit). Each use keeps its own current state. Over an unbounded
+   stream of draws, `(sequence (steps chain start) draws)` walks lazily, and
+   `(transduce (steps chain start) rf init draws)` consumes the draws as they come.
+
+   The draws are not a schema argument here, as checking them would realise the stream;
+   next-state guards each one. A `start` outside the chain has no row, which next-state
+   refuses."
+  {:malli/schema [:=> [:cat Chain State] fn?]}
+  [chain start]
+  (fn [rf]
+    (let [state (volatile! start)]
+      (fn
+        ([] (rf))
+        ([acc] (rf acc))
+        ([acc u] (rf acc (vswap! state #(next-state (get chain %) u))))))))
+
 (defn walk
   "Every state visited from `start`, one step per draw: `start` first, then one state per
-   element of `us`. A `start` outside the chain has no row, which next-state refuses."
-  {:malli/schema [:=> [:cat Chain State [:sequential Draw]] [:sequential State]]}
+   element of `us`, a finite collection. For an unbounded stream of draws, use steps."
+  {:malli/schema [:=> [:cat Chain State [:sequential Draw]] [:vector State]]}
   [chain start us]
-  (vec (reductions #(next-state (get chain %1) %2) start us)))
+  (into [start] (steps chain start) us))

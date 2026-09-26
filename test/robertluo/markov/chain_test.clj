@@ -29,28 +29,40 @@
 (defspec next-state-has-positive-probability 200
   (prop/for-all [row gen-row
                  u gen-draw]
-    (pos? (get row (chain/next-state row u)))))
+                (pos? (get row (chain/next-state row u)))))
 
 (defspec next-state-picks-each-state-in-proportion-to-its-probability 200
   ;; Draws spread evenly over [0, 1) land in each interval as often as its width allows,
   ;; to within one draw at either end.
   (prop/for-all [row gen-row
                  n (gen/choose 10 500)]
-    (let [picked (frequencies (for [i (range n)]
-                                (chain/next-state row (/ (+ i 0.5) n))))]
-      (every? (fn [[s p]] (<= (abs (- (get picked s 0) (* p n))) 1.0))
-              row))))
+                (let [picked (frequencies (for [i (range n)]
+                                            (chain/next-state row (/ (+ i 0.5) n))))]
+                  (every? (fn [[s p]] (<= (abs (- (get picked s 0) (* p n))) 1.0))
+                          row))))
 
 (defspec walk-follows-only-positive-transitions 200
   (prop/for-all [[chain start us] (gen/bind gen-chain
                                             #(gen/tuple (gen/return %)
                                                         (gen/elements (keys %))
                                                         (gen/vector gen-draw)))]
-    (let [path (chain/walk chain start us)]
-      (and (= (inc (count us)) (count path))
-           (= start (first path))
-           (every? (fn [[a b]] (pos? (get-in chain [a b])))
-                   (partition 2 1 path))))))
+                (let [path (chain/walk chain start us)]
+                  (and (= (inc (count us)) (count path))
+                       (= start (first path))
+                       (every? (fn [[a b]] (pos? (get-in chain [a b])))
+                               (partition 2 1 path))))))
+
+(defspec steps-walk-the-same-as-walk 200
+  (prop/for-all [[chain start us] (gen/bind gen-chain
+                                            #(gen/tuple (gen/return %)
+                                                        (gen/elements (keys %))
+                                                        (gen/vector gen-draw)))]
+                (= (rest (chain/walk chain start us))
+                   (sequence (chain/steps chain start) us))))
+
+(deftest steps-walk-an-unbounded-stream-lazily
+  (let [chain {:a {:b 1.0} :b {:a 1.0}}]
+    (is (= [:b :a :b] (take 3 (sequence (chain/steps chain :a) (repeat 0.5)))))))
 
 (defn- refused? [f & args]
   (try (apply f args)

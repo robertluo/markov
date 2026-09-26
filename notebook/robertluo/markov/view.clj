@@ -22,6 +22,16 @@
   (let [r (java.util.Random. seed)]
     (vec (repeatedly n #(.nextDouble r)))))
 
+(defn draw-stream
+  "Unbounded uniform draws for `seed`, as an eduction: reducible and seqable, and caching
+   nothing, so holding it holds no draws, and every pass sees the same ones. The i-th draw
+   depends on the seed and i alone. Bound it with `(take n)` where it is consumed."
+  {:malli/schema [:=> [:cat :int] [:fn seqable?]]}
+  [seed]
+  (let [base (.nextLong (java.util.SplittableRandom. seed))]
+    (eduction (map #(.nextDouble (java.util.SplittableRandom. (+ base %))))
+              (range))))
+
 (defn diagram
   "The chain as a state diagram, one arrow per positive transition."
   {:malli/schema [:=> [:cat chain/Chain] any?]}
