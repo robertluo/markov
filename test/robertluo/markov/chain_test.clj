@@ -24,7 +24,7 @@
   (gen/bind gen-chain #(gen/elements (vals %))))
 
 (def gen-draw
-  (gen/such-that #(< % 1.0) (gen/double* {:min 0.0 :max 1.0 :NaN? false})))
+  (gen/double* {:min 0.0 :max (Math/nextDown 1.0) :NaN? false :infinite? false}))
 
 (defspec next-state-has-positive-probability 200
   (prop/for-all [row gen-row
@@ -56,6 +56,12 @@
   (prop/for-all [walk (gen/vector (gen/elements [:a :b :c]))]
                 (= (map vector (cons nil walk) walk)
                    (sequence chain/transitions walk))))
+
+(defspec windows-are-the-last-k-states-at-each-step 200
+  (prop/for-all [states (gen/vector (gen/elements [:0 :1]))
+                 k (gen/choose 1 4)]
+                (= (map #(keyword (apply str (map name %))) (partition k 1 states))
+                   (sequence (chain/windows k) states))))
 
 (defspec steps-walk-the-same-as-walk 200
   (prop/for-all [[chain start us] (gen/bind gen-chain

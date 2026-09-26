@@ -92,6 +92,24 @@
                  (vreset! prev s)
                  (rf acc [p s]))))))
 
+(defn windows
+  "A transducer from a sequence of states (or symbols) to the windows of the last `k` of
+   them, from the k-th on, each as a keyword of their names run together: :0110. A k-th
+   order chain is a chain on these windows. Names are best one character long, or
+   different windows may run together into the same keyword."
+  {:malli/schema [:=> [:cat pos-int?] ifn?]}
+  [k]
+  (fn [rf]
+    (let [window (volatile! [])]
+      (fn
+        ([] (rf))
+        ([acc] (rf acc))
+        ([acc s]
+         (let [w (vswap! window #(let [w (conj % s)] (if (> (count w) k) (subvec w 1) w)))]
+           (if (= k (count w))
+             (rf acc (keyword (apply str (map name w))))
+             acc)))))))
+
 (defn walk
   "Every state visited from `start`, one step per draw: `start` first, then one state per
    element of `us`, a finite collection. For an unbounded stream of draws, use steps."

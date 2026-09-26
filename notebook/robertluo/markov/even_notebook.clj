@@ -1,6 +1,6 @@
 ;; # Find the state, don't widen the window
 ;;
-;; A lab. The Markov property says the next step depends on the present state alone. When
+;; A show room for `robertluo.markov.hidden`. The Markov property says the next step depends on the present state alone. When
 ;; a process seems to remember more, a common fix is a k-th order chain: take the last k
 ;; observations as the state. That is still a first-order chain, only with a guessed
 ;; state, and the guess can be hopeless. The **even process** has an exact description
@@ -9,7 +9,7 @@
 (ns robertluo.markov.even-notebook
   (:require [robertluo.markov.chain :as chain]
             [robertluo.markov.estimate :as estimate]
-            [robertluo.markov.instrument :as instrument]
+            [robertluo.markov.hidden :as hidden]
             [robertluo.markov.learner :as learner]
             [robertluo.markov.view :as view]
             [scicloj.kindly.v4.kind :as kind]))
@@ -22,54 +22,25 @@
 ;; length. Where the machine goes is fixed by where it is and what it emits (it is
 ;; *unifilar*), so its state can be read off the symbols once they reveal it.
 
-(def Probability [:and number? [:>= 0] [:<= 1]])
-
-(defn- total-one? [machine]
-  (every? (fn [row] (== 1 (transduce (map (comp second val)) + 0 row))) (vals machine)))
-
-(def Machine
-  "Each hidden state's row: every symbol it may emit, with the state it goes to and the
-   probability. Symbols are keywords; each row's probabilities sum to 1."
-  [:and
-   [:map-of chain/State [:map-of chain/State [:tuple chain/State Probability]]]
-   [:fn {:error/message "each row must sum to 1"} total-one?]])
-
 (def even
-  {:A {:0 [:A 1/2] :1 [:B 1/2]}
-   :B {:1 [:A 1]}})
+  {:A {:0 {:A 1/2} :1 {:B 1/2}}
+   :B {:1 {:A 1}}})
 
 (defn- machine-diagram [machine]
   (kind/mermaid
    (apply str "stateDiagram-v2\n"
           (for [[from row] machine
-                [sym [to p]] row]
+                [sym nexts] row
+                [to p] nexts]
             (str "  " (name from) " --> " (name to) ": " (name sym) " | " p "\n")))))
 
 (machine-diagram even)
 
-;; Emitting is like walking a chain, one draw per symbol, built lazily from an unbounded
-;; source of draws:
-
-(defn emit
-  "A transducer from draws to the symbols `machine` emits from `start`. Each use keeps
-   its own hidden state."
-  {:malli/schema [:=> [:cat Machine chain/State] ifn?]}
-  [machine start]
-  (fn [rf]
-    (let [state (volatile! start)]
-      (fn
-        ([] (rf))
-        ([acc] (rf acc))
-        ([acc u]
-         (let [row (get machine @state)
-               sym (chain/next-state (update-vals row (comp double second)) u)]
-           (vreset! state (first (get row sym)))
-           (rf acc sym)))))))
-
-^:kindly/hide-code (kind/hidden (instrument/instrument!))
+;; Emitting (`hidden/emit`) is like walking a chain, two draws per symbol (which symbol,
+;; and where to), built lazily from an unbounded source of draws:
 
 (defn- symbols [seed n]
-  (into [] (comp (emit even :A) (take n)) (view/draw-stream seed)))
+  (into [] (comp (partition-all 2) (hidden/emit even :A) (take n)) (view/draw-stream seed)))
 
 (def sample (symbols 1 10000))
 
@@ -111,32 +82,14 @@
 ;; ## Windows as states
 ;;
 ;; A k-th order model takes the last k symbols as its state. Turn the symbols into a walk
-;; of windows, and it is exactly a first-order chain on windows: the counting learner
-;; learns it unchanged.
+;; of windows (`chain/windows`), and it is exactly a first-order chain on windows: the
+;; counting learner learns it unchanged.
 
-(defn windows
-  "A transducer from symbols to the windows of the last `k` of them, each as a keyword
-   (:0110), from the k-th symbol on."
-  {:malli/schema [:=> [:cat pos-int?] ifn?]}
-  [k]
-  (fn [rf]
-    (let [window (volatile! [])]
-      (fn
-        ([] (rf))
-        ([acc] (rf acc))
-        ([acc sym]
-         (let [w (vswap! window #(let [w (conj % sym)] (if (> (count w) k) (subvec w 1) w)))]
-           (if (= k (count w))
-             (rf acc (keyword (apply str (map name w))))
-             acc)))))))
-
-^:kindly/hide-code (kind/hidden (instrument/instrument!))
-
-(def ^:private window-walk (into [] (windows 2) (take 12 sample)))
+(def ^:private window-walk (into [] (chain/windows 2) (take 12 sample)))
 
 window-walk
 
-(estimate/estimate (learner/learn estimate/counting {} (into [] (windows 2) sample)))
+(estimate/estimate (learner/learn estimate/counting {} (into [] (chain/windows 2) sample)))
 
 ;; A window's next window is the window shifted by one symbol, so each row of that chain
 ;; is a prediction of the next symbol given the last k. Already at k = 2, the window
@@ -150,26 +103,7 @@ window-walk
 ;; machine is in A, and the 1s since then tell it where it is now. Only a window of all 1s
 ;; leaves it unsure, and such a window grows rarer, but never impossible, as k grows.
 
-(def Belief
-  "How likely the machine is to be in each hidden state; states ruled out are left out."
-  [:map-of chain/State [:and number? [:> 0] [:<= 1]]])
-
 (def stationary {:A 2/3 :B 1/3})
-
-(defn- prediction [machine belief]
-  (reduce-kv (fn [acc s b]
-               (reduce-kv (fn [acc sym [_ p]] (update acc sym (fnil + 0) (* b p)))
-                          acc (get machine s)))
-             {} belief))
-
-(defn- updated [machine belief sym]
-  (let [moved (reduce-kv (fn [acc s b]
-                           (if-let [[to p] (get-in machine [s sym])]
-                             (if (pos? p) (update acc to (fnil + 0) (* b p)) acc)
-                             acc))
-                         {} belief)
-        total (reduce + (vals moved))]
-    (update-vals moved #(let [q (/ % total)] (if (integer? q) (long q) q)))))
 
 (defn- window-beliefs
   "Every belief the windows of length k lead to, with how likely such windows are."
@@ -178,16 +112,16 @@ window-walk
                   (reduce-kv (fn [acc belief p]
                                (reduce-kv (fn [acc sym px]
                                             (if (pos? px)
-                                              (update acc (updated machine belief sym)
+                                              (update acc (hidden/observe machine belief sym)
                                                       (fnil + 0) (* p px))
                                               acc))
-                                          acc (prediction machine belief)))
+                                          acc (hidden/predict machine belief)))
                              {} beliefs))
                 {stationary 1})
        k))
 
 (defn- best-window-loss [k]
-  (transduce (map (fn [[belief p]] (* p (entropy (prediction even belief)))))
+  (transduce (map (fn [[belief p]] (* p (entropy (hidden/predict even belief)))))
              + 0.0 (window-beliefs even k)))
 
 (def ^:private exact
@@ -223,7 +157,7 @@ window-walk
    positions for every k: from the max-k-th symbol on."
   [k counts syms]
   (let [losses (into []
-                     (comp (windows k)
+                     (comp (chain/windows k)
                            chain/transitions
                            (drop (- max-k k -1))
                            (map (fn [[before after]]
@@ -235,7 +169,7 @@ window-walk
 
 (def ^:private learned-windows
   (for [k (range 1 (inc max-k))]
-    [k (learner/learn estimate/counting {} (eduction (windows k) train))]))
+    [k (learner/learn estimate/counting {} (eduction (chain/windows k) train))]))
 
 (def ^:private window-results
   (for [[k counts] learned-windows]
@@ -246,34 +180,16 @@ window-walk
 ;; Instead of a window, keep the belief about the hidden state, updating it on each
 ;; symbol. It is the state the Markov property asks for: all of the past that matters
 ;; for the future, in two numbers. From {A ⅔, B ⅓} it collapses to certainty at the
-;; first 0, and stays certain.
-
-(defn track
-  "A transducer from symbols to what a predictor that knows `machine` makes of them,
-   starting from `belief`: for each symbol, the probability it was given before it came,
-   and the belief after it."
-  {:malli/schema [:=> [:cat Machine Belief] ifn?]}
-  [machine belief]
-  (fn [rf]
-    (let [current (volatile! belief)]
-      (fn
-        ([] (rf))
-        ([acc] (rf acc))
-        ([acc sym]
-         (let [b @current
-               p (get (prediction machine b) sym 0)]
-           (rf acc {:symbol sym :p p :belief (vreset! current (updated machine b sym))})))))))
-
-^:kindly/hide-code (kind/hidden (instrument/instrument!))
+;; first 0, and stays certain (`hidden/track`).
 
 (kind/table
  {:column-names ["symbol" "probability it was given" "belief after"]
-  :row-vectors (for [{:keys [symbol p belief]} (into [] (comp (track even stationary) (take 12))
+  :row-vectors (for [{:keys [symbol p belief]} (into [] (comp (hidden/track even stationary) (take 12))
                                                      test-symbols)]
                  [(name symbol) p (pr-str belief)])})
 
 (def ^:private tracked-bits
-  (/ (transduce (comp (track even stationary) (drop max-k) (map (comp bits :p)))
+  (/ (transduce (comp (hidden/track even stationary) (drop max-k) (map (comp bits :p)))
                 + 0.0 test-symbols)
      (- (count test-symbols) max-k)))
 
@@ -317,7 +233,7 @@ tracked-bits
 ;; walk:
 
 (def ^:private hidden-walk
-  (eduction (comp (track even stationary)
+  (eduction (comp (hidden/track even stationary)
                   (keep (fn [{:keys [belief]}] (when (= 1 (count belief)) (key (first belief))))))
             train))
 

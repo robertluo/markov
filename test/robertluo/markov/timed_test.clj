@@ -13,7 +13,7 @@
    :down     {:up 1.0}})
 
 (def ^:private gen-draw
-  (gen/such-that #(< % 1.0) (gen/double* {:min 0.0 :max 1.0 :NaN? false})))
+  (gen/double* {:min 0.0 :max (Math/nextDown 1.0) :NaN? false :infinite? false}))
 
 (def ^:private gen-sojourns
   "A trajectory of the machine, from pairs of generated draws."

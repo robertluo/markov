@@ -2,6 +2,8 @@
  :deps
  {org.clojure/clojure {:mvn/version "1.12.6"}
   metosin/malli {:mvn/version "0.20.2"}
+  ;; Statistical tests, e.g. the chi-square comparison CSSR uses to tell states apart.
+  org.apache.commons/commons-math3 {:mvn/version "3.6.1"}
   ;; A git dependency: not on Clojars yet. Required only once a problem needs a graph.
   io.github.robertluo/state-graph {:git/url "https://github.com/robertluo/state-graph"
                                    :git/sha "f5cd30a23a74a0973185624ea51cfd2f01b4ad5f"}}
