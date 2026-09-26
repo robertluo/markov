@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
+inputs:
+  nix-claude-code:
+    url: github:ryoppippi/nix-claude-code
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling

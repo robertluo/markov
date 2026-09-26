@@ -1,0 +1,17 @@
+{:paths ["src"]
+ :deps
+ {org.clojure/clojure {:mvn/version "1.12.6"}
+  metosin/malli {:mvn/version "0.20.2"}
+  ;; A git dependency: not on Clojars yet. Required only once a problem needs a graph.
+  io.github.robertluo/state-graph {:git/url "https://github.com/robertluo/state-graph"
+                                   :git/sha "f5cd30a23a74a0973185624ea51cfd2f01b4ad5f"}}
+ :aliases
+ {;; test.check and kaocha are here; the runner is `clojure -M:dev:test`, never `-M:test` alone.
+  :dev {:extra-paths ["dev" "test"]
+        :extra-deps {org.clojure/test.check {:mvn/version "1.1.3"}
+                     lambdaisland/kaocha {:mvn/version "1.91.1392"}}}
+  :test {:main-opts ["-m" "kaocha.runner"]}
+  :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.7.0"}}
+          :main-opts ["-m" "nrepl.cmdline"]}
+  :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "RELEASE"}}
+         :main-opts ["-m" "clj-kondo.main"]}}}

@@ -1,0 +1,11 @@
+#kaocha/v1
+;; After every namespace is loaded, markov.instrument/hook collects the :malli/schema of
+;; every public fn under markov.* and instruments it, so each test runs against guarded
+;; functions without a fixture per namespace.
+{:tests [{:id           :unit
+          :test-paths   ["test"]
+          :source-paths ["src"]}]
+ :plugins [:kaocha.plugin/hooks]
+ :kaocha.hooks/post-load [markov.instrument/hook]
+ :kaocha/reporter [kaocha.report/dots]
+ :kaocha.plugin/capture-output true}
