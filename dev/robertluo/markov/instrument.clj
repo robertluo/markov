@@ -10,7 +10,7 @@
   (->> (all-ns)
        (map ns-name)
        (filter #(str/starts-with? (name %) "robertluo.markov."))
-       (remove #{'robertluo.markov.instrument})))
+       (remove #{'robertluo.markov.instrument 'robertluo.markov.notebooks})))
 
 (defn instrument!
   "Collects every loaded robertluo.markov.* namespace and instruments it. Answers the

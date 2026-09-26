@@ -10,7 +10,7 @@ Implementations of Markov chains, starting from the simplest form. See README.md
 | lint | `clojure -M:lint --lint src test dev notebook` |
 | REPL | `clojure -M:dev:nrepl`, then `(robertluo.markov.instrument/instrument!)` after loading a namespace |
 | notebook REPL | `clojure -M:dev:notebook:nrepl`, then `(scicloj.clay.v2.api/make! {:source-path "notebook/robertluo/markov/chain_notebook.clj"})` |
-| render notebooks | `clojure -M:dev:notebook -m scicloj.clay.v2.main -r notebook/robertluo/markov/<ns>_notebook.clj` → `target/notebook/` (config in `clay.edn`) |
+| render notebooks | automatic: `devenv up` runs `robertluo.markov.notebooks`, which renders every notebook to `target/notebook/` and again on each change under `src/` or `notebook/` (reloading changed source namespaces first). Once: `clojure -M:dev:notebook -m robertluo.markov.notebooks --once` (exits 1 on failure). From a notebook REPL: `(robertluo.markov.notebooks/watch!)`. Config in `clay.edn` |
 
 ## Conventions
 

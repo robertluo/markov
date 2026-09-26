@@ -5,6 +5,9 @@
   ;; after (re)loading a robertluo.markov.* namespace
   (instrument/instrument!)
 
+  ;; with the :notebook alias: keep every notebook rendered as src/ and notebook/ change
+  ((requiring-resolve 'robertluo.markov.notebooks/watch!))
+
   ;; with the :notebook alias: render a notebook and open it in the browser
   ((requiring-resolve 'scicloj.clay.v2.api/make!)
    {:source-path "notebook/robertluo/markov/chain_notebook.clj"}))

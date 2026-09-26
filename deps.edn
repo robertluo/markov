@@ -13,8 +13,11 @@
   :test {:main-opts ["-m" "kaocha.runner"]}
   ;; Clay notebooks under notebook/, run on top of :dev (`clojure -M:dev:notebook`) so they
   ;; instrument through robertluo.markov.instrument like the tests do. See clay.edn.
+  ;; tools.namespace and beholder serve robertluo.markov.notebooks, the render-on-change watcher.
   :notebook {:extra-paths ["notebook"]
-             :extra-deps {org.scicloj/clay {:mvn/version "2.0.23"}}}
+             :extra-deps {org.scicloj/clay {:mvn/version "2.0.23"}
+                          org.clojure/tools.namespace {:mvn/version "1.5.0"}
+                          com.nextjournal/beholder {:mvn/version "1.0.2"}}}
   :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.7.0"}}
           :main-opts ["-m" "nrepl.cmdline"]}
   :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "RELEASE"}}

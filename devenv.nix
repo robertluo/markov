@@ -11,6 +11,10 @@
 
   claude.code.enable = true;
 
+  # https://devenv.sh/processes/
+  # `devenv up`: renders every notebook, then again on each change under src/ or notebook/.
+  processes.notebooks.exec = "clojure -M:dev:notebook -m robertluo.markov.notebooks";
+
   # https://devenv.sh/tests/
   enterTest = ''
     clojure -M:dev:test
