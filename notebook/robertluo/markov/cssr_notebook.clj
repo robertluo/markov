@@ -1,21 +1,54 @@
 ;; # Learning the states: CSSR
 ;;
-;; A lab. The even notebook tracked the even process with the true machine: it was handed
-;; the states. Here they are learned from symbols alone, by building them from their
-;; definition: two pasts are in the same state when they predict the same future. This is
-;; CSSR, Causal-State Splitting Reconstruction (Shalizi & Klinkner, 2004), in a simplified
-;; form, as a learner: the evidence is gathered in one fold, and the states are found by
-;; the readout.
+;; *Part 5 of 6 · previous: [hidden states](robertluo.markov.even_notebook.html)
+;; · next: [learning hidden states by Baum–Welch](robertluo.markov.hmm_notebook.html)*
+;;
+;; A show room for `robertluo.markov.cssr`. The even notebook tracked the even process
+;; with the true machine: it was handed the states. Here they are learned from symbols
+;; alone, by building them from their definition: two pasts are in the same state when
+;; they predict the same future. This is CSSR, Causal-State Splitting Reconstruction
+;; (Shalizi & Klinkner, 2004), in a simplified form, as a learner: the evidence is
+;; gathered in one fold, and the states are found by the readout.
+;;
+;; ## Background
+;;
+;; **What a state is, by definition.** The previous page argued that the right state is
+;; not a window of recent symbols but whatever in the past matters for the future. Take
+;; that literally: group together all pasts that give the same prediction of what comes
+;; next. Each group is a **causal state**, and the causal states with their transitions
+;; form the process's **ε-machine**. It is the smallest model that predicts as well as
+;; possible, and it is unifilar: from a state, the next symbol settles the next state. The
+;; even process's ε-machine is exactly its two states, A and B.
+;;
+;; **From definition to algorithm.** We cannot look at infinitely long pasts, so CSSR
+;; looks at **suffixes**, the last few symbols, up to a length `l-max`. It counts what
+;; followed each suffix, then groups suffixes whose counts look like the same prediction.
+;; A longer suffix is a more detailed past; if it predicts like its shorter parent, it adds
+;; nothing and joins the parent's state. If it predicts differently, the state must
+;; **split**. States appear only when the evidence demands them, so the number of states
+;; is found, not assumed.
+;;
+;; **Telling predictions apart: a statistical test.** Counts are noisy. After a 0, the
+;; even process emits 1 half the time, but 1,000 observations will not show exactly 500.
+;; Are 48% and 53% "the same prediction"? A **chi-square test** answers: if both sets of
+;; counts came from one and the same distribution, how likely is a difference this large?
+;; That probability is the **p-value**. When it falls below a chosen **significance level
+;; α**, we call the predictions different. The choice of α is a trade-off between two
+;; mistakes: a large α splits states that are really one (a false split); a small α
+;; merges states that are really two (a false merge).
+;;
+;; **Transient states.** Some pasts have not yet revealed where the process is: in the
+;; even process, a run of 1s longer than the suffix cannot tell where the pairs began.
+;; Their predictions are mixtures. They describe where a process might be *before* its
+;; state is known, not a state it returns to, and CSSR drops them.
 
 (ns robertluo.markov.cssr-notebook
   (:require [clojure.string :as str]
-            [robertluo.markov.chain :as chain]
+            [robertluo.markov.cssr :as cssr]
             [robertluo.markov.hidden :as hidden]
-            [robertluo.markov.instrument :as instrument]
             [robertluo.markov.learner :as learner]
             [robertluo.markov.view :as view]
-            [scicloj.kindly.v4.kind :as kind])
-  (:import [org.apache.commons.math3.stat.inference ChiSquareTest]))
+            [scicloj.kindly.v4.kind :as kind]))
 
 ;; ## The data
 ;;
@@ -41,68 +74,28 @@
 ;; with a full `l-max` symbols before them are counted, so that every suffix length counts
 ;; the same positions.
 ;;
-;; These counts are the **statistic** of a learner: the **events** are [suffix next]
-;; pairs, the **step** counts one, and they **combine** by adding.
+;; These counts are the **statistic** of the learner `(cssr/cssr params)`, in the shape
+;; of [part 3](robertluo.markov.learner_notebook.html): the **events** are [suffix next]
+;; pairs (`cssr/suffix-events`), the **step** counts one, and they **combine** by adding.
+;; So the evidence can be gathered progressively, and all the hard work happens in the
+;; **readout**, whenever a model is wanted.
 
-(def Suffix [:vector chain/State])
+(def ^:private params {:l-max 3 :alpha 0.001})
 
-(def SuffixCounts
-  "For each suffix of the past, how many times each symbol came next."
-  [:map-of Suffix [:map-of chain/State pos-int?]])
-
-(defn suffix-events
-  "A transducer from symbols to [suffix next] events: at each position with at least
-   `l-max` symbols before it, one per suffix length from 0 to `l-max`."
-  {:malli/schema [:=> [:cat nat-int?] ifn?]}
-  [l-max]
-  (fn [rf]
-    (let [past (volatile! [])]
-      (fn
-        ([] (rf))
-        ([acc] (rf acc))
-        ([acc sym]
-         (let [p   @past
-               acc (if (= l-max (count p))
-                     (reduce (fn [acc l]
-                               (let [r (rf acc [(subvec p (- l-max l)) sym])]
-                                 (if (reduced? r) (reduced r) r)))
-                             acc (range (inc l-max)))
-                     acc)]
-           (vswap! past #(let [w (conj % sym)] (if (> (count w) l-max) (subvec w 1) w)))
-           acc))))))
-
-(defn suffix-step
-  {:malli/schema [:=> [:cat SuffixCounts [:tuple Suffix chain/State]] SuffixCounts]}
-  [counts [suffix sym]]
-  (update-in counts [suffix sym] (fnil inc 0)))
-
-(defn suffix-combine
-  {:malli/schema [:=> [:cat SuffixCounts SuffixCounts] SuffixCounts]}
-  [a b]
-  (merge-with #(merge-with + %1 %2) a b))
-
-^:kindly/hide-code (kind/hidden (instrument/instrument!))
-
-(def ^:private l-max 3)
-
-(def ^:private evidence
-  (learner/learn {:events    (suffix-events l-max)
-                  :statistic SuffixCounts
-                  :empty     {}
-                  :step      #'suffix-step
-                  :combine   #'suffix-combine
-                  :readout   identity}
-                 {} train))
+(def ^:private evidence (learner/learn (cssr/cssr params) {} train))
 
 (defn- p-one [counts]
   (let [n (reduce + 0 (vals counts))]
     (double (/ (get counts :1 0) n))))
 
+(defn- suffix-name [suffix]
+  (if (seq suffix) (apply str (map name suffix)) "λ"))
+
 (kind/table
  {:column-names ["suffix" "then 0" "then 1" "P(1 next)"]
   :row-vectors (for [[suffix counts] (sort-by (comp (juxt count identity) key) evidence)
                      :when (<= (count suffix) 2)]
-                 [(apply str (map name suffix)) (get counts :0 0) (get counts :1 0)
+                 [(suffix-name suffix) (get counts :0 0) (get counts :1 0)
                   (format "%.3f" (p-one counts))])})
 
 ;; Already the states show: after a 0 the next symbol is a coin (A); after 01 it is
@@ -117,64 +110,7 @@
 ;; significance α. If it does, it joins that state. If not, it joins whichever other state
 ;; it matches best, or, matching none, starts a new state. States split only when the
 ;; evidence demands it.
-
-(def Params
-  [:map
-   [:l-max pos-int?]
-   [:alpha [:double {:min 0.0 :max 1.0}]]])
-
-(defn- p-value
-  "How likely counts this different are, were both drawn from one distribution."
-  [a b]
-  (let [syms (vec (into (set (keys a)) (keys b)))]
-    (if (< (count syms) 2)
-      1.0
-      (.chiSquareTestDataSetsComparison (ChiSquareTest.)
-                                        (long-array (map #(get a % 0) syms))
-                                        (long-array (map #(get b % 0) syms))))))
-
-(defn- pooled [counts suffixes]
-  (transduce (map counts) (completing #(merge-with + %1 %2)) {} suffixes))
-
-(defn- place
-  "The states once `child` is placed: in `parent`'s state if it predicts alike, else in
-   the other state it matches best, else in a new state."
-  [counts alpha states parent child]
-  (let [c (counts child)
-        p #(p-value c (pooled counts (nth states %)))]
-    (if (> (p parent) alpha)
-      (update states parent conj child)
-      (let [[best pv] (apply max-key second [nil -1.0]
-                             (for [i (range (count states)) :when (not= i parent)]
-                               [i (p i)]))]
-        (if (and best (> pv alpha))
-          (update states best conj child)
-          (conj states #{child}))))))
-
-(defn- grow [counts {:keys [l-max alpha]}]
-  (let [alphabet (keys (counts []))]
-    (reduce (fn [states l]
-              ;; states only grow at the end, so an index taken here stays valid
-              (reduce (fn [states [parent x]]
-                        (reduce (fn [states a]
-                                  (let [child (into [a] x)]
-                                    (if (counts child) (place counts alpha states parent child) states)))
-                                states alphabet))
-                      states
-                      (for [[i s] (map-indexed vector states) x s :when (= l (count x))] [i x])))
-            [#{[]}]
-            (range l-max))))
-
-(def ^:private grown (grow evidence {:l-max l-max :alpha 0.001}))
-
-(defn- state-table [counts states recurrent?]
-  (kind/table
-   {:column-names ["state" "suffixes" "P(1 next)" "recurrent?"]
-    :row-vectors (for [[i s] (map-indexed vector states)]
-                   [i (str/join " " (sort (map #(if (seq %) (apply str (map name %)) "λ") s)))
-                    (format "%.3f" (p-one (pooled counts s)))
-                    (recurrent? s)])}))
-
+;;
 ;; ## Transient states
 ;;
 ;; Some states hold only suffixes that have not seen enough: the all-1s suffixes, whose
@@ -183,15 +119,19 @@
 ;; returns to. So a state is kept only if some suffix in it, extended further into the
 ;; past, stays in it: once a past has revealed its state, more past does not change it.
 ;; (CSSR removes transient states from the transition graph; this criterion is a
-;; simpler stand-in, enough for this page.)
+;; simpler stand-in.)
 
-(defn- recurrent-in [states]
-  (let [of (into {} (for [[i s] (map-indexed vector states) x s] [x i]))]
-    (fn [s]
-      (let [i (of (first s))]
-        (boolean (some (fn [x] (some #(= i (of (into [%] x))) [:0 :1])) s))))))
+(def ^:private learned (cssr/reconstruct params evidence))
 
-(state-table evidence grown (recurrent-in grown))
+(defn- pooled [counts suffixes]
+  (transduce (map counts) (completing #(merge-with + %1 %2)) {} suffixes))
+
+(kind/table
+ {:column-names ["state" "suffixes" "P(1 next)" "kept?"]
+  :row-vectors (for [[i s] (map-indexed vector (:grown learned))]
+                 [i (str/join " " (sort (map suffix-name s)))
+                  (format "%.3f" (p-one (pooled evidence s)))
+                  (get (:recurrent learned) i)])})
 
 ;; ## Making it a machine
 ;;
@@ -200,101 +140,6 @@
 ;; dropped. A state must send all its suffixes to the same state on b; where they
 ;; disagree, the state is split until they agree. A next suffix that lands in a transient
 ;; state is unresolved (the window lost the 0 that would settle it), and is left out.
-
-(defn- successors [counts of x]
-  (into {}
-        (keep (fn [[b _]]
-                (when-let [j (of (subvec (conj x b) 1))] [b j])))
-        (counts x)))
-
-(defn- compatible? [a b]
-  (every? (fn [[k v]] (or (not (contains? b k)) (= v (b k)))) a))
-
-(defn- split-by-successors [counts states]
-  (let [of (into {} (for [[i s] (map-indexed vector states) x s] [x i]))]
-    (into []
-          (mapcat (fn [s]
-                    (let [keyed (sort-by (comp - count second)
-                                         (map (juxt identity #(successors counts of %)) s))]
-                      (vals (reduce (fn [groups [x k]]
-                                      (if-let [g (first (filter #(compatible? k %) (keys groups)))]
-                                        (-> groups
-                                            (dissoc g)
-                                            (assoc (merge g k) (conj (groups g) x)))
-                                        (assoc groups k #{x})))
-                                    {} keyed)))))
-          states)))
-
-(defn- determinize
-  "Split states until each sends all its suffixes to one state per symbol. The number of
-   states is small by definition, so iterating to a fixed point is cheap."
-  [counts states]
-  (->> (iterate #(split-by-successors counts %) states)
-       (partition 2 1)
-       (drop-while (fn [[a b]] (not= (count a) (count b))))
-       ffirst))
-
-(defn- moves
-  "Where each of `states` goes on each symbol it was seen to emit, by index; a symbol
-   whose next suffix is unresolved is left out."
-  [counts states]
-  (let [of (into {} (for [[i s] (map-indexed vector states) x s] [x i]))]
-    (mapv (fn [s]
-            (into {} (keep (fn [[b _]] (when-let [j (some #(get (successors counts of %) b) s)]
-                                         [b j])))
-                  (pooled counts s)))
-          states)))
-
-(defn- prune
-  "Drop states with nowhere to go, until every state left has somewhere. Dropping one can
-   leave another with nowhere, so this repeats; the states are few by definition."
-  [counts states]
-  (let [ms (moves counts states)
-        kept (into [] (keep-indexed (fn [i s] (when (seq (ms i)) s))) states)]
-    (if (= (count kept) (count states)) states (recur counts kept))))
-
-(def Reconstruction
-  [:map
-   [:grown [:vector [:set Suffix]]]
-   [:states [:vector [:set Suffix]]]
-   [:machine {:doc "nil when no state survives"} [:maybe hidden/Machine]]])
-
-(defn reconstruct
-  "The states `counts` reveal under `params`, and the machine they make."
-  {:malli/schema [:=> [:cat Params SuffixCounts] Reconstruction]}
-  [{:keys [l-max] :as params} counts]
-  (let [grown  (grow counts params)
-        kept   (filterv (recurrent-in grown) grown)
-        full   (into [] (comp (map (fn [s] (into #{} (filter #(= l-max (count %))) s)))
-                              (filter seq))
-                     kept)
-        states (prune counts (determinize counts full))
-        id     #(keyword (str "s" %))]
-    {:grown   grown
-     :states  states
-     :machine (when (seq states)
-                (into {}
-                      (map-indexed
-                       (fn [i [s m]]
-                         (let [c     (pooled counts s)
-                               total (reduce + 0 (map c (keys m)))]
-                           [(id i) (into {} (map (fn [[b j]] [b {(id j) (/ (c b) total)}])) m)])))
-                      (map vector states (moves counts states))))}))
-
-(defn cssr
-  "The learner of states: symbols in, suffix counts known, a machine out."
-  {:malli/schema [:=> [:cat Params] learner/Learner]}
-  [{:keys [l-max] :as params}]
-  {:events    (suffix-events l-max)
-   :statistic SuffixCounts
-   :empty     {}
-   :step      #'suffix-step
-   :combine   #'suffix-combine
-   :readout   (fn [counts] (:machine (reconstruct params counts)))})
-
-^:kindly/hide-code (kind/hidden (instrument/instrument!))
-
-(def ^:private learned (reconstruct {:l-max l-max :alpha 0.001} evidence))
 
 (defn- machine-diagram [machine]
   (kind/mermaid
@@ -331,7 +176,8 @@
 ;; second part starts with the last `l-max` symbols of the first, as context only: they
 ;; are not counted again.
 
-(let [l     (cssr {:l-max l-max :alpha 0.001})
+(let [l     (cssr/cssr params)
+      l-max (:l-max params)
       [a b] [(subvec train 0 5000) (subvec train (- 5000 l-max))]]
   (= (learner/learn l {} train)
      (learner/combine l (learner/learn l {} a) (learner/learn l {} b))))
@@ -342,8 +188,8 @@
 ;; fare with less, or with other settings?
 
 (defn- trial [n params]
-  (let [known   (learner/learn (cssr params) {} (subvec train 0 n))
-        machine (learner/readout (cssr params) known)]
+  (let [l       (cssr/cssr params)
+        machine (learner/readout l (learner/learn l {} (subvec train 0 n)))]
     [n (:l-max params) (:alpha params) (count machine)
      (if-not machine
        "no state survives"
@@ -377,5 +223,8 @@
 ;; - What it needs instead: suffixes long enough to see where a state is revealed
 ;;   (`l-max`), enough data for the test, and a significance α that trades false splits
 ;;   against false merges.
+;; - Its limits show on harder processes. On a 3-phase cycle of 0s and 1s, whose phase
+;;   takes long to reveal, this simplified version builds too many states; where a symbol
+;;   marks the phase, it recovers the cycle exactly (see the tests).
 ;;
 ;; The next notebook assumes the number of states instead, and fits them by Baum–Welch.
