@@ -1,5 +1,8 @@
 ;; # Beyond counting: learning over time
 ;;
+;; *Part 3 of 6 · previous: [learning a chain](robertluo.markov.estimate_notebook.html)
+;; · next: [hidden states](robertluo.markov.even_notebook.html)*
+;;
 ;; A show room for `robertluo.markov.learner`. Counting has a shape: observations become
 ;; **events**; the model keeps a **statistic** of them, starting from an **empty** one (or
 ;; a prior); each event is folded in by a **step**; two statistics learned apart
@@ -11,6 +14,38 @@
 ;; counts that fade (`robertluo.markov.fade`); and a chain in continuous time, learned
 ;; from how long each state lasts (`robertluo.markov.timed`). A table at the end lines
 ;; the three up.
+;;
+;; ## Background
+;;
+;; **Why a shape at all.** Counting in the previous page had a useful property: learn
+;; January, then February, and you know exactly what learning both at once would tell you.
+;; That is what lets a model learn from data as it arrives, split a big job across
+;; machines, or merge what two sites observed. It holds because counts **combine** (by
+;; adding) in a way that obeys three simple rules, which the tests check for every
+;; learner:
+;;
+;; - combining with "nothing learned yet" changes nothing;
+;; - combining is associative: grouping does not matter, (a + b) + c = a + (b + c);
+;; - learning in parts, then combining, knows the same as learning at once.
+;;
+;; Mathematicians call a set with such an operation a *monoid*; the laws are what make
+;; progressive learning safe. This page tries two problems that are not plain counting,
+;; to see whether the shape still holds.
+;;
+;; **Change over time.** A chain whose probabilities never change is *stationary*
+;; (time-homogeneous). Real processes drift: seasons, wear, fashion. One remedy is to
+;; forget gradually, weighing recent evidence more, as an exponentially weighted moving
+;; average does for prices. How fast to forget is a trade-off between following change
+;; and averaging away noise, a form of the *bias–variance trade-off*.
+;;
+;; **Continuous time.** Some processes do not tick once a day. A machine can fail at any
+;; moment. A **continuous-time Markov chain** keeps the Markov property in time: how long
+;; a state has lasted says nothing about how much longer it will last. That forces the
+;; time spent in a state to follow an *exponential* distribution, the one memoryless
+;; waiting time, and makes the chain a set of **rates** rather than step probabilities.
+;; One more idea from survival analysis appears here: an observation cut off by the end of
+;; watching (a machine still running when we stop looking) is **censored**. It still
+;; carries information: the state lasted *at least* that long.
 
 (ns robertluo.markov.learner-notebook
   (:require [robertluo.markov.chain :as chain]
@@ -173,14 +208,17 @@
 ;; ## Time held, and jumps
 ;;
 ;; For a rate, the evidence is how many times the machine left a state for another, and
-;; how long it had spent in that state in all: rate = jumps / time held. So the **events**
+;; how long it had spent in that state in all: rate = jumps / time held. (Just as counting
+;; divided counts by their total, this is the maximum-likelihood estimate of a rate: two
+;; failures in 100 hours of running estimates 0.02 per hour.) So the **events**
 ;; are a sojourn with where it went next, and the **statistic** keeps two things: time
 ;; held per state, and jumps.
 ;;
-;; The last sojourn watched has no next: the watch ended before it did. Its time still
-;; counts, and says the state lasted at least that long; it just has no jump. That event
-;; can only be emitted once the trajectory is over, by the events transducer's
-;; completion.
+;; The last sojourn watched has no next: the watch ended before it did. It is censored:
+;; its time still counts, and says the state lasted at least that long; it just has no
+;; jump. That event can only be emitted once the trajectory is over. (In the code, events
+;; are produced by a *transducer*, a reusable step-by-step transformation of a stream;
+;; its *completion* is the moment the stream ends, when it can emit what it held back.)
 
 (learner/learn timed/timed (:empty timed/timed) (take 3 week))
 

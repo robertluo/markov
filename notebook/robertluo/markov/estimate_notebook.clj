@@ -1,8 +1,35 @@
 ;; # Learning a chain from observations
 ;;
+;; *Part 2 of 6 · previous: [the simplest Markov chain](robertluo.markov.chain_notebook.html)
+;; · next: [learning over time](robertluo.markov.learner_notebook.html)*
+;;
 ;; A show room for `robertluo.markov.estimate`. The chain notebook went from a chain to
 ;; its walks; this goes back, from walks alone to a chain that explains them: a model of
 ;; the process that made them, which grows better as observations keep coming.
+;;
+;; ## Background
+;;
+;; In practice nobody hands us the chain. We see what happened (a year of weather, a log
+;; of clicks) and want the probabilities that best explain it. That is **estimation**:
+;; guessing a model's numbers from data. Two ideas carry this page.
+;;
+;; **Maximum likelihood.** Any candidate chain gives the observed walk some probability:
+;; multiply the probability of each step taken. That number is the candidate's
+;; **likelihood**. The maximum-likelihood estimate is the candidate that makes the data
+;; most probable. For a Markov chain it comes out as common sense: if a sunny day was
+;; followed by a cloudy one 10 times out of 41, estimate P(cloudy | sunny) = 10/41. Count,
+;; then divide.
+;;
+;; **Prior knowledge.** Counting alone is overconfident with little data. Never having
+;; seen snow follow rain does not make it impossible. A **prior** encodes what we believe
+;; before looking, here as **pseudo-counts**: pretend each transition was already seen α
+;; times. With α = 1 this is Laplace's old "add one" rule. As real counts pile up, the
+;; pretend ones matter less and less. (In Bayesian terms, the pseudo-counts are a
+;; Dirichlet prior, and the result is the mean of the posterior.)
+;;
+;; A consequence that shapes the code: the counts are all the data can tell a Markov chain
+;; (they are a **sufficient statistic**). Once counted, the walk can be thrown away, and
+;; new observations just add to the counts. Learning is progressive.
 
 (ns robertluo.markov.estimate-notebook
   (:require [robertluo.markov.chain :as chain]
@@ -40,6 +67,9 @@
 ;; What the model knows is counts: how often each state was followed by each other
 ;; state. That is everything a Markov chain can learn from a walk, since the next state
 ;; depends on today only. Knowing nothing is no counts; learning a walk adds its counts.
+;;
+;; (In the code, `learner/learn` folds a walk into what is known: it goes through the walk
+;; once, updating the counts at each step. The next page explains the shape behind it.)
 
 (def observed (reduce #(learner/learn estimate/counting %1 %2) {} months))
 
@@ -64,9 +94,11 @@
 
 ;; ## How good is it?
 ;;
-;; Two chains are as far apart as their furthest pair of rows, and two rows as far as
-;; the most probability they give differently to any set of next states (total
-;; variation): 0 when they agree, 1 when they share nothing.
+;; To score an estimate we need a distance between two chains. Compare one row at a time:
+;; the **total variation distance** between two rows is the most probability they give
+;; differently to any set of next states (half the sum of the differences). It is 0 when
+;; the rows agree and 1 when they share nothing. Two chains are as far apart as their
+;; furthest pair of rows.
 
 (estimate/distance weather learned)
 
@@ -108,7 +140,8 @@
 
 ;; Observations need not fit in memory either. `learn` reads a walk as it goes, so an
 ;; unbounded stream of draws, walked lazily by `chain/steps` and bounded only where it
-;; is consumed, is never held whole:
+;; is consumed, is never held whole. (*Lazily* means each step is produced only when
+;; something asks for it, so a stream can be endless without filling memory.)
 
 (def ^:private long-run
   (eduction (chain/steps weather :sunny) (take 100000) (view/draw-stream 9)))
@@ -118,7 +151,9 @@
 ;; ## More observations, better model
 ;;
 ;; The error of an estimate from one walk of n steps, averaged over 20 walks for each n,
-;; shrinks roughly like 1/√n: a hundred times the data for a tenth of the error.
+;; shrinks roughly like 1/√n: a hundred times the data for a tenth of the error. That rate
+;; is the usual one for estimating a proportion from samples (a poll's margin of error
+;; shrinks the same way), since each row of the chain is a set of proportions.
 
 (def ^:private sizes [10 30 100 300 1000 3000 10000])
 

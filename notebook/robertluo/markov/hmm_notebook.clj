@@ -1,9 +1,42 @@
 ;; # Learning the states: Baum–Welch
 ;;
+;; *Part 6 of 6 · previous: [learning hidden states by CSSR](robertluo.markov.cssr_notebook.html)
+;; · start: [the simplest Markov chain](robertluo.markov.chain_notebook.html)*
+;;
 ;; A lab, and the other answer to the question the even notebook left. CSSR built the
 ;; states from the data, testing which pasts predict alike. Here the number of hidden
 ;; states is **assumed**, and their probabilities are fitted to make the data as likely
 ;; as possible, by expectation–maximisation (Baum–Welch).
+;;
+;; ## Background
+;;
+;; **Hidden Markov models.** A machine with hidden states that emit symbols, as in
+;; [part 4](robertluo.markov.even_notebook.html), is a **hidden Markov model** (HMM). HMMs
+;; were the workhorse of speech recognition for decades (the hidden states are sounds
+;; being spoken; the symbols are what the microphone hears) and are still used to find
+;; genes in DNA. Three questions come up again and again: how likely is some data under a
+;; given model; which hidden states most likely produced it; and, given only data, which
+;; model? This page is about the third.
+;;
+;; **A chicken-and-egg problem.** If we knew the hidden states, learning the model would
+;; be counting, as in [part 2](robertluo.markov.estimate_notebook.html). If we knew the
+;; model, we could infer the hidden states, as the belief did in part 4. We know neither.
+;; **Expectation–maximisation** (EM) breaks the circle by alternating: guess a model;
+;; infer, for every moment, how likely each hidden move was (the *expectation* step);
+;; count those likelihoods as if they were observations (the *maximisation* step), which
+;; gives a new model; repeat. For HMMs this is called the **Baum–Welch** algorithm. Each
+;; round makes the data at least as likely as the round before.
+;;
+;; **What can go wrong.** EM climbs uphill from wherever it starts, so it can stop on a
+;; hill that is not the highest (a **local optimum**); the usual remedy is to restart
+;; from several random guesses and keep the best. And the number of hidden states is not
+;; learned: it must be chosen beforehand, which is where CSSR, which finds the number,
+;; differs most.
+;;
+;; **Likelihood and bits.** The two scores in this tutorial are the same thing. The log of
+;; the likelihood of n symbols, divided by −n log 2, is the average surprise in bits per
+;; symbol from part 4. So fitting for the highest likelihood is fitting for the least
+;; surprise on the training data.
 
 (ns robertluo.markov.hmm-notebook
   (:require [robertluo.markov.chain :as chain]
@@ -38,6 +71,11 @@
 ;; the probability of each hidden move: **expected counts**, fractions of a count. The
 ;; **maximisation** step normalises them per state, exactly as counting's readout does,
 ;; and that is the next machine. Each step makes the data at least as likely as before.
+;;
+;; (Why a backward pass? The belief of part 4 uses only the symbols up to now, which is
+;; all a predictor may use. But to judge what happened at some moment, afterwards, the
+;; symbols that followed are evidence too: a 1 followed by a 0 was surely emitted from B.
+;; Combining both directions is called *smoothing*.)
 ;;
 ;; Unlike the learners so far, this is not one fold. The events (the expected counts)
 ;; depend on the current machine, so each step reads all the data again, and the backward

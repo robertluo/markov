@@ -65,6 +65,18 @@ A notebook is both:
   migrate the general part into `src/robertluo/markov/<feature>.clj` with tests, and leave the
   notebook requiring it, as the feature's example and application.
 
+The notebooks are also a **tutorial for readers new to the field**, read in order (see
+README.md). So a notebook:
+
+- opens with a `*Part n of N · previous · next*` line linking the neighbouring pages (links
+  are the rendered file names, e.g. `robertluo.markov.even_notebook.html`), and a
+  `## Background` section giving the ideas the page needs in plain words, with the usual
+  names in bold so a reader can look them up;
+- glosses a technical term where it first appears (one clause, or a parenthesis), whether
+  it is from the field (likelihood, entropy rate) or from the code (fold, transducer);
+- says what a result means, not only what it is; and when a new page joins the sequence,
+  updates the parts count, its neighbours' links, and the README list.
+
 In a notebook:
 
 - Don't call `instrument!` in a notebook: the renderer (`robertluo.markov.notebooks`)

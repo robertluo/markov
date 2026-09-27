@@ -13,3 +13,15 @@ We use the following libraries:
    `notebook/` changes. Open `target/notebook/robertluo.markov.chain_notebook.html`. Without
    devenv, `clojure -M:dev:notebook -m robertluo.markov.notebooks` does the same, and
    `--once` renders once and exits.
+
+## The notebooks as a tutorial
+
+The notebooks double as a tutorial for readers new to Markov chains. Each page opens with
+the background it needs, and links to the previous and next. Read them in order:
+
+1. `chain_notebook`: what a Markov chain is, and how it runs.
+2. `estimate_notebook`: learning a chain from what it did (maximum likelihood, priors).
+3. `learner_notebook`: learning over time (chains that drift, chains in continuous time).
+4. `even_notebook`: hidden states, and why a longer window of the past is no substitute.
+5. `cssr_notebook`: learning hidden states by building them from the data (CSSR).
+6. `hmm_notebook`: learning hidden states by fitting an assumed number (Baum–Welch).

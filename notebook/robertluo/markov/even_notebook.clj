@@ -1,10 +1,44 @@
 ;; # Find the state, don't widen the window
 ;;
-;; A show room for `robertluo.markov.hidden`. The Markov property says the next step depends on the present state alone. When
-;; a process seems to remember more, a common fix is a k-th order chain: take the last k
-;; observations as the state. That is still a first-order chain, only with a guessed
-;; state, and the guess can be hopeless. The **even process** has an exact description
-;; with two states, yet no finite window predicts it as well as those two states do.
+;; *Part 4 of 6 · previous: [learning over time](robertluo.markov.learner_notebook.html)
+;; · next: [learning hidden states by CSSR](robertluo.markov.cssr_notebook.html)*
+;;
+;; A show room for `robertluo.markov.hidden`. The Markov property says the next step
+;; depends on the present state alone. When a process seems to remember more, a common fix
+;; is a k-th order chain: take the last k observations as the state. That is still a
+;; first-order chain, only with a guessed state, and the guess can be hopeless. The
+;; **even process** has an exact description with two states, yet no finite window
+;; predicts it as well as those two states do.
+;;
+;; ## Background
+;;
+;; **What you see is not always the state.** So far we observed the states themselves:
+;; the weather *was* the state. Often we see only a sign of it. You hear footsteps but
+;; not who walks; a sensor reads a temperature but not whether the machine is wearing
+;; out. Such a process has **hidden states** that move by a Markov chain, and on each move
+;; *emit* a symbol we observe. The symbols alone need not be Markov at all: what comes
+;; next can depend on the whole past, because the past is our only clue to the hidden
+;; state.
+;;
+;; **The usual fix, and its limit.** A common remedy is a **k-th order** model: predict
+;; from the last k symbols, as a phone keyboard predicts the next word from the last few.
+;; (Such models over words are the n-gram models of classic language processing.) This
+;; page shows, on a tiny example, why that fix can fall short however large k gets, and
+;; costs more the larger it gets.
+;;
+;; **Measuring prediction in bits.** To compare predictors we need a score. Information
+;; theory gives one: a predictor that gave the symbol that came probability p pays
+;; −log₂ p **bits** of *surprise*. A fair coin costs 1 bit a toss; a certain prediction
+;; costs 0; ruling out what happens costs infinitely much. The average surprise of the
+;; best possible predictor is the process's **entropy rate**: its irreducible
+;; randomness per symbol, a floor no predictor beats.
+;;
+;; **Keeping a belief.** If we know the machine but not its state, we can still keep a
+;; **belief**: how likely each hidden state is, given the symbols so far. Each new symbol
+;; updates it by **Bayes' rule**: weigh each state by how likely it was to emit that
+;; symbol, then rescale so the weights sum to 1. This running update is called
+;; **filtering**, and the belief is exactly the state the Markov property wants: all of
+;; the past that matters for the future.
 
 (ns robertluo.markov.even-notebook
   (:require [robertluo.markov.chain :as chain]
@@ -21,6 +55,10 @@
 ;; and goes back to A. So 1s come in pairs: every run of 1s between two 0s has even
 ;; length. Where the machine goes is fixed by where it is and what it emits (it is
 ;; *unifilar*), so its state can be read off the symbols once they reveal it.
+;;
+;; The even process is a classic small example in *computational mechanics*, the study
+;; of how much structure a process has and how to find it. It is simple enough to work by
+;; hand and just tricky enough to break the window approach.
 
 (def even
   {:A {:0 {:A 1/2} :1 {:B 1/2}}
@@ -145,7 +183,10 @@ window-walk
 ;; The limit above assumes a window's predictions are known exactly. Learned from data,
 ;; each of the 2ᵏ windows needs its own evidence, and wide windows are seen too rarely to
 ;; learn. Learn each k from 10,000 symbols, test on 10,000 others, predicting each
-;; symbol from its window with add-one smoothing:
+;; symbol from its window with add-one smoothing (the pseudo-counts of part 2, so that an
+;; unseen window does not rule anything out). Testing on symbols not learned from is what
+;; exposes *overfitting*: a model with too many numbers to learn fits the noise of its
+;; training data, and predicts new data worse.
 
 (def train (symbols 2 10000))
 (def test-symbols (symbols 3 10000))
@@ -247,5 +288,9 @@ tracked-bits
 ;; This page was handed the states: it tracked beliefs with the true machine. Learning
 ;; the states themselves from symbols alone is the real task. The belief table above
 ;; hints at how: many windows lead to the same belief, so windows that predict alike can
-;; be merged into one state. Finding those classes from the window counts (as the CSSR
-;; algorithm does) is for the next notebook.
+;; be merged into one state. Two families of methods take this on, from opposite ends:
+;;
+;; - [CSSR](robertluo.markov.cssr_notebook.html) builds the states from the data, merging
+;;   pasts that predict alike, so the number of states is found, not given.
+;; - [Baum–Welch](robertluo.markov.hmm_notebook.html) assumes a number of hidden states
+;;   and fits their probabilities to make the data as likely as possible.
